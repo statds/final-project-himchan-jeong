@@ -1,0 +1,252 @@
+---
+title: "Predictive modeling in P&C Insurance"
+author:
+- Himchan Jeong, University of Connecticut
+output:
+  pdf_document:
+   number_sections: yes
+classoption: fleqn
+header-includes:
+- \usepackage{bbm}
+- \usepackage{multirow}
+- \usepackage{hhline}
+- \usepackage{amsmath,amssymb}
+- \usepackage{booktabs}
+- \usepackage{caption}
+- \captionsetup[table]{belowskip=4pt,aboveskip=0pt}
+- \captionsetup[figure]{belowskip=0pt,aboveskip=4pt}
+- \newcommand{\E}[1]{{\mathbb E}\left[#1\right]}
+- \newcommand{\Var}[1]{{\mathrm Var}\left(#1\right)}
+- \DeclareMathOperator*{\argmin}{argmin}
+---
+
+\section{Introduction}
+
+\subsection{What is Actuarial Science?}
+![Components of Data Science](C:/Users/HimChan/Desktop/Daction/datascience.jpg)
+
+"Actuarial science is the discipline that applies mathematical and statistical methods to assess risk in insurance, finance and other industries and professions." (Wikipedia) In short, We need to PRICE given risk for the transaction. Actuary is one of the professions with 'data-driven decision making', for more than 200 years. So actuary can be classified as a type of data scientist whose expertise is in insurance and related industires. Thus, actuaries needs well-developed predictive model both with high predictability and interpretability.
+
+There are a lot of reasons why the interpretability is important in Actuarial Science.
+\begin{itemize}
+\item Tradition
+\item Internal/External Communication
+\item Regulation
+\item Robustness
+\end{itemize}
+
+I want to introduce current practice done by property and casualty (P\&C) insurance company, as well as suggest the more sophisticated predictive model which can outperform the benchmarks.
+
+\subsection{Common Data Structure}
+
+For ratemaking in P\&C, we have to predict the cost of claims $S = \sum\limits_{k=1}^n C_k$. Policyholder $i$ is followed over time $t=1,\ldots,T_i$ years. Unit of analysis $it$ -- an insured driver $i$ over time $t$ (year) For each $it$, we could have several claims, $k=0,1,\ldots,n_{it}$
+Thus, we have available information on: number of claims $n_{it}$, amount of claim $c_{itk}$, exposure $e_{it}$ and covariates (explanatory variables)  $x_{it}$, which often include age, gender, vehicle type, building type, building location, driving history and so forth
+
+\section{Model Specification}
+
+\subsection{Current Approches for Claim Modeling}
+
+There are two major models which are well-known and widely used in P\&C insurance company. First one is two-parts model for frequency and severity, and the other is Tweedie model.
+
+In two-parts model, total claim is represented as following;
+
+$\qquad \text{Total Cost of Claims }=\text{ Frequency }\times \text{Average Severity}$
+
+Therefore, the joint density of the number of claims and the average claim size can be decomposed as
+\begin{eqnarray*}
+f(N,\overline{C}| \textbf{x}) &=& f(N| \mathbf{x}) \times f(\overline{C}|N, \textbf{x}) \\
+\text{joint} &=& \text{frequency} ~\times~ \text{conditional severity}.
+\end{eqnarray*}
+In general, it is assumed $N \sim \text{Pois}(e^{X\alpha})$, and $C_i \sim \text{Gamma}(\frac{1}{\phi}, e^{X\beta}\phi)$.
+
+In tweedie Model, instead of dividing the total cost into two parts, we directly entertain the distribution of compound loss $S$ where
+$$
+\begin{aligned}
+&S = \sum_{k=1}^N C_k, \quad N \sim \text{Pois}(e^{X\alpha}) \\
+&C_k \sim \text{Gamma}(\frac{1}{\phi}, e^{X\beta}\phi), \quad C_k \perp N \ \ \forall k
+\end{aligned}
+$$
+in order that it has point mass probability on $\{S=0\}$ and has the following property.
+$$
+\E{S} = \mu, \quad \Var{S} = \Phi \mu^{p}, \quad p \in (1,2)
+$$
+However, there are some pitfalls in the current practice aforementioned.
+\begin{itemize}
+\item (1) Dependence between the frequency and the severity
+\smallskip
+\item (2) Longitudinal property of data structure. 
+  \begin{itemize}
+  \item For example, if we observed a policyholder $i$ for $T_i$ years, then we have following observation $N_{i1},N_{i2},\ldots,N_{iT_i}$, which may not be identically and independently distributed.
+  \end{itemize}
+\end{itemize}
+
+For the first problem, if we assume that $N$ and $C_1,C_2,\ldots,C_n$ are independent, then we can calculate the premium for compound loss as
+$$
+\begin{aligned}
+\E{S} &= \E{\sum_{k=1}^N C_k} = \E{\E{\sum_{k=1}^N C_k | N}} \\
+      &= \E{\E{C_1+ \cdots + C_N | N}} = \E{N\E{C_1 | N}} \\
+      &= \E{N \E{C}} = \E{N}\E{C}
+\end{aligned}
+$$
+In other words, we can just multiply the expected values from frequency model and the average severity model to get the estimate for compound loss. However, in general $N$ and $C_k$ are correlated so that $\E{S} \neq \E{N}\E{C}$. If we have positive correlation between $N$ and $C$, then
+$$
+\E{S} > \E{N} \E{C}
+$$
+so the company suffers from the higher loss relative to earned premium.
+
+On the other hand, if we have negative correlation between $N$ and $C$, then
+$$
+\E{S} < \E{N} \E{C}
+$$
+so the company confronts the loss of market share due to higher premium.
+
+\subsection{Possible Alternatives}
+There are some possible alternatives which can be used for dealing with the pitfalls.
+\begin{itemize}
+  \item For dependence between the frequency and severity
+    \begin{itemize}
+    \item Set $\E{\overline{C}|N}=e^{X\beta+N\theta}$
+    \item Copula for $N$ and $\overline{C}$
+    \end{itemize}
+\smallskip
+  \item For longitudinal property
+    \begin{itemize}
+    \item Random effects model
+    \item Copula for multiple claim observation
+    \end{itemize}
+\smallskip
+  \item Non-traditional approaches
+    \begin{itemize}
+    \item Neural networks
+    \item Regression for each group classified by decision tree
+    \end{itemize}
+\end{itemize}
+
+```{r, message=FALSE, echo=FALSE}
+setwd("C:/Users/HimChan/Desktop/DAction")
+train1 <- read.csv("train.csv")
+train <- train1[,c(2:3,8,10:15,17:21)]
+rm(train1)
+test1 <- read.csv("test.csv")
+test <- test1[,c(2:3,8,10:15,17:21)]
+rm(test1)
+```
+
+\section{Analysis}
+\subsection{Data Description}
+ Here I use a public dataset on insurance claim, provided by Wisconsin Propery Fund. (https://sites.google.com/a/wisc.edu/jed-frees/) It consists of `r prettyNum(length(train$PolicyNum),big.mark=",")` observation in traning set and `r prettyNum(length(test$PolicyNum),big.mark=",")` observation in test set. It is a longitudinal data with more or less `r prettyNum(length(unique(train$PolicyNum)),big.mark=",")` policyholder, followed for `r max(train$Year) - min(train$Year)+1` years. Although the dataset includes information one multi-line insurance, here I only used building and contents (BC) claim information.
+
+\begin{table}[h!t!]
+\begin{center}
+\caption{Observable policy characteristics used as covariates} \label{tab:1}
+\resizebox{!}{2.85cm}{
+\begin{tabular}{l|lrrr}
+\hline \hline
+Categorical & Description &  & \multicolumn{2}{c}{Proportions} \\
+variables \\
+\hline
+TypeCity & Indicator for city entity:           & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$TypeCity)/length(train$PolicyNum),2)` \%} \\
+TypeCounty & Indicator for county entity:       & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$TypeCounty)/length(train$PolicyNum),2)` \%} \\
+TypeMisc & Indicator for miscellaneous entity:  & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$TypeMisc)/length(train$PolicyNum),2)` \%} \\
+TypeSchool & Indicator for school entity:       & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$TypeSchool)/length(train$PolicyNum),2)` \%} \\
+TypeTown & Indicator for town entity:           & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$TypeTown)/length(train$PolicyNum),2)` \%} \\
+TypeVillage & Indicator for village entity:     & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$TypeVillage)/length(train$PolicyNum),2)` \%} \\
+NoClaimCreditBC & No BC claim in prior year:    & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$NoClaimCreditBC)/length(train$PolicyNum),2)` \%} \\
+\hline
+ Continuous & & Minimum & Mean & Maximum \\
+ variables \\
+\hline
+CoverageBC  & Log coverage amount of BC claim in mm  &  `r round(min(train$CoverageBC),2)` & `r round(mean(train$CoverageBC),2)`
+            & `r round(max(train$CoverageBC),2)`\\
+lnDeductBC  & Log deductible amount for BC claim     &  `r round(min(train$lnDeductBC),2)` & `r round(mean(train$lnDeductBC),2)`
+            & `r round(max(train$lnDeductBC),2)`\\
+\hline \hline
+\end{tabular}}
+\end{center}
+\end{table}
+
+\begin{table}[h!t!]
+\begin{center}
+\caption{Summary statistics for claim frequency} \label{tab:2}
+\resizebox{!}{0.7cm}{
+\begin{tabular}{l|lrrrr}
+\hline \hline
+        &                               & Minimum & Mean & Variance & Maximum \\
+\hline
+FreqBC  & number of BC claim in a year  & `r round(min(train$FreqBC),2)` &
+`r round(mean(train$FreqBC),2)`         & `r round(var(train$FreqBC),2)` &
+`r round(max(train$FreqBC),2)` \\
+\hline \hline
+\end{tabular}}
+\end{center}
+\end{table}
+
+Here we can see very high overdispersion. (Variance is much larger than mean.) Therefore, use of Negative Binomial distribution is recommended rather than Poisson distribution. Moreover, there are some `outliers' which looks too big. (231 claim per year) So they might be wrong records on the claim file.
+
+```{r, echo=FALSE, message=FALSE,warning=FALSE}
+library(knitr)
+library(kableExtra)
+library(plyr)
+library(fitdistrplus)
+trainp <- subset(train,log(yAvgBC)>0)
+Fumm <- data.frame(train$FreqBC)
+colnames(Fumm) <- "Freq"
+freqtable <- as.data.frame(count(Fumm, 'Freq'))
+colnames(freqtable) <- c("Count","Observed")
+freqtable   <- rbind( freqtable[1:10, ],c(">9",
+                      sum(freqtable$Observed[11:length(freqtable$Observed)])) )
+freq_npois  <- fitdist(Fumm$Freq, "pois")
+freq_nbinom <- fitdist(Fumm$Freq, "nbinom")
+freqtable$Poisson       <- rep(0,length(freqtable$Observed))
+freqtable$Poisson[1:10] <- round(dpois(0:9, lambda = mean(Fumm$Freq))*length(Fumm$Freq),digits=1)
+freqtable$Poisson[11]   <- round(ppois(10, lambda = mean(Fumm$Freq),lower.tail = FALSE)
+                                *length(Fumm$Freq),digits=1)
+freqtable$NegBin        <- rep(0,length(freqtable$Observed))
+freqtable$NegBin[1:10]  <- round(dnbinom(0:9, size=coef(freq_nbinom)[1], mu=coef(freq_nbinom)[2])
+                                *length(Fumm$Freq),digits=1)
+freqtable$NegBin[11]    <- round(pnbinom(10,  size=coef(freq_nbinom)[1], mu=coef(freq_nbinom)[2]
+                                ,lower.tail = FALSE)*length(Fumm$Freq),digits=1)
+
+colnames(freqtable)[4] <- "Negative Binomial"
+freqtable <- rbind(freqtable,c("$\\chi^2$","",round(-2*logLik(freq_npois),1),round(-2*logLik(freq_nbinom),1)))
+options(knitr.table.format = "latex")
+options(knitr.table.format = "latex")
+kable_styling(kable(freqtable, ,caption = "Goodness-of-fit test for the frequency component",booktabs = T,digits=0,linesep = c("", "", "", "", "","", "", "", "", "", "", "\\hline"),  toprule = "\\hhline{====}",bottomrule="\\hhline{====}",escape=FALSE)  %>%  add_header_above(c(" " = 2, "Fitted" = 2)), latex_options = "hold_position")
+```
+
+\begin{table}[h!t!]
+\begin{center}
+\caption{Summary statistics for claim severity} \label{tab:3}
+\resizebox{!}{0.65cm}{
+\begin{tabular}{l|lrrrr}
+\hline \hline
+        &                               & Minimum & Mean & Variance & Maximum \\
+\hline
+log(yAvgBC)  & (log) avg size of claim in a year  & `r round(min(log(trainp$yAvgBC)),2)` &
+`r round(mean(log(trainp$yAvgBC)),2)`         & `r round(var(log(trainp$yAvgBC)),2)` &
+`r round(max(log(trainp$yAvgBC)),2)` \\
+\hline \hline
+\end{tabular}}
+\end{center}
+\end{table}
+
+Usually, for the positive severity, it is traditional to use either log-normal distribution or gamma distribution with log-link.
+
+```{r echo=FALSE, message=FALSE,plots, fig.cap="Plots of fitting normal and gamma to average severity",fig.height=6.9}
+GamAvgBC <- fitdist(log(trainp$yAvgBC), "gamma")
+NormAvgBC <- fitdist(log(trainp$yAvgBC), "norm")
+
+par(mfrow=c(2,2),mar=c(5, 4, 2, 2) + 0.1,mgp=c(2.4, 1, 0))
+qqcomp(GamAvgBC, fitcol = "blue", main = "Gamma QQ Plot", addlegend = FALSE,xlab = "log-gamma quantiles")
+denscomp(GamAvgBC, fitcol = "blue", main = "Gamma Density Plot", addlegend = FALSE,xlab = "log(AvgBC)")
+qqcomp(NormAvgBC, fitcol = "purple", main = "Normal QQ Plot", addlegend = FALSE,xlab = "log-normal quantiles")
+denscomp(NormAvgBC, fitcol = "purple", main = "Normal Density Plot", addlegend = FALSE,xlab = "log(AvgBC)")
+```
+
+\newpage
+\subsection{Future Works}
+\begin{itemize}
+  \item Deal with `outliers' on the observations for claim frequency.
+  \item Provide methodologies for modelling the claim and compare their performance with those of the benchmark models.
+  \item If possible, suggest a model with higher predictability and interpretability which can be used in P\&C insurance company.
+\end{itemize}
