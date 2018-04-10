@@ -1,9 +1,10 @@
 ---
 title: "Predictive models for P&C insurance"
 author: "Himchan Jeong"
-date: "6 April, 2018"
+date: "10 April, 2018"
 output:
   beamer_presentation:
+    keep_tex: true
     colortheme: orchid
     slide_level: 1
     template: default.tex
@@ -27,68 +28,16 @@ header-includes:
 - \captionsetup[figure]{belowskip=0pt,aboveskip=0pt}
 ---
 
-# Interpretability Issue on Actuarial Science
-There are a lot of reasons why the interpretability is important in Actuarial Science.
-\begin{itemize}
-\item Tradition
-\item Internal/External Communication
-\item Regulation
-\item Robustness
-\end{itemize}
-
 # Purpose of the Project
 \begin{itemize}
 \item Introduce current practice done by property and casualty (P\&C) insurance company
 \item Suggest the more sophisticated predictive model which can outperform the benchmarks
 \end{itemize}
 
-# P\&C Insurance Claim Data Structure 
-\begin{itemize}
-\item For ratemaking in P\&C, we have to predict the cost of claims $S = \sum\limits_{k=1}^N C_k$.
-\item Policyholder $i$ is followed over time $t=1,\ldots,T_i$ years.
-\item Unit of analysis ``$it$'' -- an insured driver $i$ over time $t$ (year)
-\item For each ``$it$'', could have several claims, $k=0,1,\ldots,N_{it}$
-\item Have available information on: number of claims $n_{it}$, amount of claim $c_{itk}$, exposure $e_{it}$ and covariates (explanatory variables)  $x_{it}$
-\smallskip
-\begin{itemize}
-\item covariates often include age, gender, vehicle type, building type, building location, driving history and so forth
-\end{itemize}
-\end{itemize}
-
 # Current Approches for Claim Modeling
 \begin{itemize}
 \item (1) Two-parts model for frequency and severity
 \item (2) Tweedie model
-\end{itemize}
-
-# Two-parts Model
-\begin{itemize}
-\item Total claim is represented as following;
-\begin{equation*}
-\text{Total Cost of Claims }=\text{ Frequency }\times \text{Average Severity}
-\end{equation*}
-\item The joint density of the number of claims and the average claim size can be decomposed as
-\begin{eqnarray*}
-f(N,\overline{C}| \textbf{x}) &=& f(N| \mathbf{x}) \times f(\overline{C}|N, \textbf{x}) \\
-\text{joint} &=& \text{frequency} ~\times~ \text{conditional severity}.
-\end{eqnarray*}
-\item In general, it is assumed $N \sim \text{Pois}(e^{X\alpha})$, and $C_i \sim \text{Gamma}(\frac{1}{\phi}, e^{X\beta}\phi)$.
-\end{itemize}
-
-
-# Tweedie Model
-\begin{itemize}
-\item Instead of dividing the total cost into two parts, Tweedie model directly entertain the distribution of compound loss $S$ where
-$$
-\begin{aligned}
-&S = \sum_{k=1}^N C_k, \quad N \sim \text{Pois}(e^{X\alpha}) \\
-&C_k \sim \text{Gamma}(\frac{1}{\phi}, e^{X\beta}\phi), \quad C_k \perp N \ \ \forall k
-\end{aligned}
-$$
-\item It has point mass probability on $\{S=0\}$ and has the following property.
-$$
-\E{S} = \mu, \quad \Var{S} = \Phi \mu^{p}, \quad p \in (1,2)
-$$
 \end{itemize}
 
 # Pitfalls in Current Practices
@@ -99,35 +48,6 @@ $$
   \begin{itemize}
   \item For example, if we observed a policyholder $i$ for $T_i$ years, then we have following observation $N_{i1},N_{i2},\ldots,N_{iT_i}$, which may not be identically and independently distributed.
   \end{itemize}
-\end{itemize}
-
-# Premium for Compound Loss under Independence
-\begin{itemize}
-\item If we assume that $N$ and $C_1,C_2,\ldots,C_n$ are independent, then we can calculate the premium for compound loss as
-$$
-\begin{aligned}
-\E{S} &= \E{\sum_{k=1}^N C_k} = \E{\E{\sum_{k=1}^N C_k | N}} \\
-      &= \E{\E{C_1+ \cdots + C_N | N}} = \E{N\E{C_1 | N}} \\
-      &= \E{N \E{C}} = \E{N}\E{C}
-\end{aligned}
-$$
-In other words, we just multiply the expected values from frequency model and the average severity model.
-\item In general, $\E{S} \neq \E{N}\E{C}$.
-\end{itemize}
-
-# Why is the Dependence Important?
-\begin{itemize}
-\item If we have positive correlation between $N$ and $C$, then
-$$
-\E{S} > \E{N} \E{C}
-$$
-so the company suffers from the higher loss relative to earned premium.
-
-\item If we have negative correlation between $N$ and $C$, then
-$$
-\E{S} < \E{N} \E{C}
-$$
-so the company confronts the loss of market share due to higher premium.
 \end{itemize}
 
 # Possible Alternatives for the Benchmarks
@@ -287,10 +207,10 @@ log(yAvgPN)  & (log) avg size of PN claim in a year  & `r round(min(log(train$yA
 \begin{itemize}
   \item Independent Two-parts [$\E{C|n}=\exp(X\beta)$]:
         
-        Poisson-Gamma GLM, neural network  
+        Poisson-Gamma GLM, ZIP-Gamma GLM, neural network  
   \item Dependent Two-parts [$\E{C|n}=\exp(X\beta+n\theta)$]:
   
-        Poisson-Gamma GLM, neural network
+        Poisson-Gamma GLM, ZIP-Gamma GLM, neural network
   \item One-part [$\E{S}=\exp(X\eta)$]:
         
         Tweedie GLM, neural network
@@ -407,93 +327,102 @@ glm.avgsev.pois_pred <- exp(predict(glm.avgsev_dep,
 source("Gindex.R")
 load(file="BC.Rdata")
 Px <- rep(1,length(test$ClaimBC))
-par(mfrow=c(2,3),mar=c(1,1,4,1),mgp=c(2.2,1,0),oma=c(0,0,0,0))
+par(mfrow=c(2,4),mar=c(1,1,4,1),mgp=c(2.2,1,0),oma=c(0,0,0,0))
 gingraph.poisgam_indep <- gini.index.graphic(glm.avgsev_indep.pred*glm.freq.pois_pred,
-                                             test$ClaimBC,Px,Title="Indep Pois-Gamma GLM")
+                                             test$ClaimBC,Px,Title="Indep Pois-Gamma")
 gingraph.poisgam_dep <- gini.index.graphic(glm.avgsev.pois_pred*glm.freq.pois_pred,
-                                           test$ClaimBC,Px,Title="Dep Pois-Gamma GLM")
+                                           test$ClaimBC,Px,Title="Dep Pois-Gamma")
+gingraph.zipgam_indep <- gini.index.graphic(glm.avgsev_indep.pred*glm.freq.zip_pred,
+                                            test$ClaimBC,Px,Title="Indep ZIP-Gamma")
+gingraph.zipgam_dep <- gini.index.graphic(glm.avgsev.zip_pred*glm.freq.zip_pred,
+                                          test$ClaimBC,Px,Title="Dep ZIP-Gamma")
 gingraph.2nnet_indep <- gini.index.graphic(nnet.avgsev_indep.pred*nnet.freq.pred,
                                            test$ClaimBC,Px,Title="Indep Two-parts NN")
 gingraph.2nnet_dep <- gini.index.graphic(nnet.avgsev_dep.pred*nnet.freq.pred,
                                          test$ClaimBC,Px,Title="Dep Two-parts NN")
 gingraph.Tweedglm <- gini.index.graphic(glm.tsev.pred,test$ClaimBC,Px,Title="Tweedie GLM")
 gingraph.1nnet <- gini.index.graphic(nnet.tsev.pred,test$ClaimBC,Px,Title="One-part NN")
-MSE_glm2ind <- sqrt(mean((glm.avgsev_indep.pred *glm.freq.pois_pred - test$ClaimBC)^2))
-# indep two-part glm (pois + gamma)
-MSE_glm2dep <- sqrt(mean((glm.avgsev.pois_pred  *glm.freq.pois_pred - test$ClaimBC)^2))
-# dep two-part glm (pois + gamma)
-MSE_nnet2ind <- sqrt(mean((nnet.avgsev_indep.pred*nnet.freq.pred - test$ClaimBC)^2))
-# indep two-part nnet
-MSE_nnet2dep <- sqrt(mean((nnet.avgsev_dep.pred  *nnet.freq.pred - test$ClaimBC)^2))
-# dep two-part nnet
+
+MSE_glm2ind <- sqrt(mean((glm.avgsev_indep.pred *glm.freq.pois_pred - test$ClaimBC)^2)) # indep two-part glm (pois + gamma)
+MSE_glm2dep <- sqrt(mean((glm.avgsev.pois_pred  *glm.freq.pois_pred - test$ClaimBC)^2)) # dep two-part glm (pois + gamma)
+MSE_glm2indz <- sqrt(mean((glm.avgsev_indep.pred *glm.freq.zip_pred - test$ClaimBC)^2)) # indep two-part glm (zip + gamma)
+MSE_glm2depz <- sqrt(mean((glm.avgsev.zip_pred  *glm.freq.zip_pred - test$ClaimBC)^2)) # dep two-part glm (zip + gamma)
+MSE_nnet2ind <- sqrt(mean((nnet.avgsev_indep.pred*nnet.freq.pred - test$ClaimBC)^2)) # indep two-part nnet
+MSE_nnet2dep <- sqrt(mean((nnet.avgsev_dep.pred  *nnet.freq.pred - test$ClaimBC)^2)) # dep two-part nnet
 MSE_nnet1 <- sqrt(mean((nnet.tsev.pred - test$ClaimBC)^2))    # one-part nnet
 MSE_tweedie <- sqrt(mean((glm.tsev.pred - test$ClaimBC)^2))   # tweedie glm
 
-MSEs <- as.data.frame(c(MSE_glm2ind,MSE_glm2dep,MSE_nnet2ind,MSE_nnet2dep,MSE_nnet1,MSE_tweedie))
+MSEs <- as.data.frame(c(MSE_glm2ind,MSE_glm2dep,MSE_glm2indz,MSE_glm2depz,MSE_nnet2ind,MSE_nnet2dep,MSE_nnet1,MSE_tweedie))
 colnames(MSEs) <- "BC"
-rownames(MSEs) <- c("Indep-2P GLM","Dep-2P GLM","Indep-2P NN","Dep-2P NN","1P NN","Tweedie GLM")
+rownames(MSEs) <- c("Indep Pois-Gamma","Dep Pois-Gamma","Indep ZIP-Gamma","Dep ZIP-Gamma","Indep-2P NN","Dep-2P NN","1P NN","Tweedie GLM")
 ```
 
 # Gini Indices IM Claim
- 
+
 ```{r, echo=FALSE, message=FALSE, gini_IM, fig.cap="The Lorenz curve and the Gini index values for IM claim",fig.height=6.15}
 source("Gindex.R")
 load(file="IM.Rdata")
 Px <- rep(1,length(test$ClaimIM))
-par(mfrow=c(2,3),mar=c(1,1,4,1),mgp=c(2.2,1,0),oma=c(0,0,0,0))
+par(mfrow=c(2,4),mar=c(1,1,4,1),mgp=c(2.2,1,0),oma=c(0,0,0,0))
 gingraph.poisgam_indep <- gini.index.graphic(glm.avgsev_indep.pred*glm.freq.pois_pred,
-                                             test$ClaimIM,Px,Title="Indep Pois-Gamma GLM")
+                                             test$ClaimIM,Px,Title="Indep Pois-Gamma")
 gingraph.poisgam_dep <- gini.index.graphic(glm.avgsev.pois_pred*glm.freq.pois_pred,
-                                           test$ClaimIM,Px,Title="Dep Pois-Gamma GLM")
+                                           test$ClaimIM,Px,Title="Dep Pois-Gamma")
+gingraph.zipgam_indep <- gini.index.graphic(glm.avgsev_indep.pred*glm.freq.zip_pred,
+                                            test$ClaimIM,Px,Title="Indep ZIP-Gamma")
+gingraph.zipgam_dep <- gini.index.graphic(glm.avgsev.zip_pred*glm.freq.zip_pred,
+                                          test$ClaimIM,Px,Title="Dep ZIP-Gamma")
 gingraph.2nnet_indep <- gini.index.graphic(nnet.avgsev_indep.pred*nnet.freq.pred,
                                            test$ClaimIM,Px,Title="Indep Two-parts NN")
 gingraph.2nnet_dep <- gini.index.graphic(nnet.avgsev_dep.pred*nnet.freq.pred,
                                          test$ClaimIM,Px,Title="Dep Two-parts NN")
 gingraph.Tweedglm <- gini.index.graphic(glm.tsev.pred,test$ClaimIM,Px,Title="Tweedie GLM")
 gingraph.1nnet <- gini.index.graphic(nnet.tsev.pred,test$ClaimIM,Px,Title="One-part NN")
-MSE_glm2ind <- sqrt(mean((glm.avgsev_indep.pred *glm.freq.pois_pred - test$ClaimIM)^2))
-# indep two-part glm (pois + gamma)
-MSE_glm2dep <- sqrt(mean((glm.avgsev.pois_pred  *glm.freq.pois_pred - test$ClaimIM)^2))
-# dep two-part glm (pois + gamma)
-MSE_nnet2ind <- sqrt(mean((nnet.avgsev_indep.pred*nnet.freq.pred - test$ClaimIM)^2))
-# indep two-part nnet
-MSE_nnet2dep <- sqrt(mean((nnet.avgsev_dep.pred  *nnet.freq.pred - test$ClaimIM)^2))
-# dep two-part nnet
+
+MSE_glm2ind <- sqrt(mean((glm.avgsev_indep.pred *glm.freq.pois_pred - test$ClaimIM)^2)) # indep two-part glm (pois + gamma)
+MSE_glm2dep <- sqrt(mean((glm.avgsev.pois_pred  *glm.freq.pois_pred - test$ClaimIM)^2)) # dep two-part glm (pois + gamma)
+MSE_glm2indz <- sqrt(mean((glm.avgsev_indep.pred *glm.freq.zip_pred - test$ClaimIM)^2)) # indep two-part glm (zip + gamma)
+MSE_glm2depz <- sqrt(mean((glm.avgsev.zip_pred  *glm.freq.zip_pred - test$ClaimIM)^2)) # dep two-part glm (zip + gamma)
+MSE_nnet2ind <- sqrt(mean((nnet.avgsev_indep.pred*nnet.freq.pred - test$ClaimIM)^2)) # indep two-part nnet
+MSE_nnet2dep <- sqrt(mean((nnet.avgsev_dep.pred  *nnet.freq.pred - test$ClaimIM)^2)) # dep two-part nnet
 MSE_nnet1 <- sqrt(mean((nnet.tsev.pred - test$ClaimIM)^2))    # one-part nnet
 MSE_tweedie <- sqrt(mean((glm.tsev.pred - test$ClaimIM)^2))   # tweedie glm
 
-MSEs$IM <- c(MSE_glm2ind,MSE_glm2dep,MSE_nnet2ind,MSE_nnet2dep,MSE_nnet1,MSE_tweedie)
+MSEs$IM <- c(MSE_glm2ind,MSE_glm2dep,MSE_glm2indz,MSE_glm2depz,MSE_nnet2ind,MSE_nnet2dep,MSE_nnet1,MSE_tweedie)
 ```
 
 # Gini Indices PN Claim
- 
+
 ```{r, echo=FALSE, message=FALSE, gini_PN, fig.cap="The Lorenz curve and the Gini index values for PN claim",fig.height=6.15}
 source("Gindex.R")
 load(file="PN.Rdata")
 Px <- rep(1,length(test$ClaimPN))
-par(mfrow=c(2,3),mar=c(1,1,4,1),mgp=c(2.2,1,0),oma=c(0,0,0,0))
+par(mfrow=c(2,4),mar=c(1,1,4,1),mgp=c(2.2,1,0),oma=c(0,0,0,0))
 gingraph.poisgam_indep <- gini.index.graphic(glm.avgsev_indep.pred*glm.freq.pois_pred,
-                                             test$ClaimPN,Px,Title="Indep Pois-Gamma GLM")
+                                             test$ClaimPN,Px,Title="Indep Pois-Gamma")
 gingraph.poisgam_dep <- gini.index.graphic(glm.avgsev.pois_pred*glm.freq.pois_pred,
-                                           test$ClaimPN,Px,Title="Dep Pois-Gamma GLM")
+                                           test$ClaimPN,Px,Title="Dep Pois-Gamma")
+gingraph.zipgam_indep <- gini.index.graphic(glm.avgsev_indep.pred*glm.freq.zip_pred,
+                                            test$ClaimPN,Px,Title="Indep ZIP-Gamma")
+gingraph.zipgam_dep <- gini.index.graphic(glm.avgsev.zip_pred*glm.freq.zip_pred,
+                                          test$ClaimPN,Px,Title="Dep ZIP-Gamma")
 gingraph.2nnet_indep <- gini.index.graphic(nnet.avgsev_indep.pred*nnet.freq.pred,
                                            test$ClaimPN,Px,Title="Indep Two-parts NN")
 gingraph.2nnet_dep <- gini.index.graphic(nnet.avgsev_dep.pred*nnet.freq.pred,
                                          test$ClaimPN,Px,Title="Dep Two-parts NN")
 gingraph.Tweedglm <- gini.index.graphic(glm.tsev.pred,test$ClaimPN,Px,Title="Tweedie GLM")
 gingraph.1nnet <- gini.index.graphic(nnet.tsev.pred,test$ClaimPN,Px,Title="One-part NN")
-MSE_glm2ind <- sqrt(mean((glm.avgsev_indep.pred *glm.freq.pois_pred - test$ClaimPN)^2))
-# indep two-part glm (pois + gamma)
-MSE_glm2dep <- sqrt(mean((glm.avgsev.pois_pred  *glm.freq.pois_pred - test$ClaimPN)^2))
-# dep two-part glm (pois + gamma)
-MSE_nnet2ind <- sqrt(mean((nnet.avgsev_indep.pred*nnet.freq.pred - test$ClaimPN)^2))
-# indep two-part nnet
-MSE_nnet2dep <- sqrt(mean((nnet.avgsev_dep.pred  *nnet.freq.pred - test$ClaimPN)^2))
-# dep two-part nnet
+
+MSE_glm2ind <- sqrt(mean((glm.avgsev_indep.pred *glm.freq.pois_pred - test$ClaimPN)^2)) # indep two-part glm (pois + gamma)
+MSE_glm2dep <- sqrt(mean((glm.avgsev.pois_pred  *glm.freq.pois_pred - test$ClaimPN)^2)) # dep two-part glm (pois + gamma)
+MSE_glm2indz <- sqrt(mean((glm.avgsev_indep.pred *glm.freq.zip_pred - test$ClaimPN)^2)) # indep two-part glm (zip + gamma)
+MSE_glm2depz <- sqrt(mean((glm.avgsev.zip_pred  *glm.freq.zip_pred - test$ClaimPN)^2)) # dep two-part glm (zip + gamma)
+MSE_nnet2ind <- sqrt(mean((nnet.avgsev_indep.pred*nnet.freq.pred - test$ClaimPN)^2)) # indep two-part nnet
+MSE_nnet2dep <- sqrt(mean((nnet.avgsev_dep.pred  *nnet.freq.pred - test$ClaimPN)^2)) # dep two-part nnet
 MSE_nnet1 <- sqrt(mean((nnet.tsev.pred - test$ClaimPN)^2))    # one-part nnet
 MSE_tweedie <- sqrt(mean((glm.tsev.pred - test$ClaimPN)^2))   # tweedie glm
 
-MSEs$PN <- c(MSE_glm2ind,MSE_glm2dep,MSE_nnet2ind,MSE_nnet2dep,MSE_nnet1,MSE_tweedie)
+MSEs$PN <- c(MSE_glm2ind,MSE_glm2dep,MSE_glm2indz,MSE_glm2depz,MSE_nnet2ind,MSE_nnet2dep,MSE_nnet1,MSE_tweedie)
 ```
 
 # MSEs for all Type of Claim per Model
@@ -504,7 +433,7 @@ MSEs
 # Analysis of the Results
 
 \begin{itemize}
-  \item According to the MSE and Gini indices of given models, in BC and PN claim one part neural network outperforms the other models, whereas two-part dependent GLM was the best for IM claim.
+  \item According to the MSE and Gini indices of given models, in BC claim one part neural network outperforms the other models, whereas two-part dependent GLM was the best for IM and PN claim.
   \item Note that the difference of performance between neural network and traditional GLM was greater when observed claim had a lot of outlier.
   \item Therefore, we may consider using neural network for predictive modeling of non-trivial dataset, whereas traditional GLM still works well with trivial dataset.
 \end{itemize}
