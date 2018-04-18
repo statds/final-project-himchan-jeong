@@ -1,0 +1,467 @@
+---
+title: "Predictive models for P&C insurance"
+author: "Himchan Jeong"
+date: "19 April, 2018"
+output:
+  beamer_presentation:
+    colortheme: orchid
+    slide_level: 1
+    template: default.tex
+    theme: madrid
+  slidy_presentation: default
+institute: University of Connecticut
+place: Data Science in Action
+shorttitle: 'STAT 6494: Data Science in Action'
+header-includes:
+- \usepackage{bbm}
+- \usepackage{xcolor}
+- \usepackage{hhline}
+- \newcommand{\E}[1]{{\mathbb E}\left[#1\right]}
+- \newcommand{\Var}[1]{{\mathrm Var}\left(#1\right)}
+- \usepackage{beamerthemesplit}
+- \usepackage{amsmath}
+- \usepackage{booktabs}
+- \usepackage{caption}
+- \newcommand\tab[1][1cm]{\hspace*{#1}}
+- \captionsetup[table]{belowskip=0pt,aboveskip=0pt}
+- \captionsetup[figure]{belowskip=0pt,aboveskip=0pt}
+---
+
+# Purpose of the Project
+\begin{itemize}
+\item Introduce current practice done by property and casualty (P\&C) insurance company
+\item Suggest the more sophisticated predictive model which can outperform the benchmarks
+\end{itemize}
+
+# Current Approches for Claim Modeling
+\begin{itemize}
+\item (1) Two-parts model for frequency and severity
+\item (2) Tweedie model
+\end{itemize}
+
+# Pitfalls in Current Practices
+\begin{itemize}
+\item (1) Dependence between the frequency and the severity
+\smallskip
+\item (2) Longitudinal property of data structure. 
+  \begin{itemize}
+  \item For example, if we observed a policyholder $i$ for $T_i$ years, then we have following observation $N_{i1},N_{i2},\ldots,N_{iT_i}$, which may not be identically and independently distributed.
+  \end{itemize}
+\end{itemize}
+
+```{r, message=FALSE, echo=FALSE}
+setwd("C:/Users/HimChan/Desktop/DAction")
+train <- read.csv("train.csv")
+test <- read.csv("test.csv")
+```
+
+# Data Description
+\begin{itemize}
+  \item Here I use a public dataset on insurance claim, provided by Wisconsin Propery Fund. \newline
+        (https://sites.google.com/a/wisc.edu/jed-frees/)
+  \item It consists of `r prettyNum(length(train$PolicyNum),big.mark=",")` observation in traning set and `r prettyNum(length(test$PolicyNum),big.mark=",")` observation in test set.
+  \item It is a longitudinal data with more or less `r prettyNum(length(unique(train$PolicyNum)),big.mark=",")` policyholder, followed for `r max(train$Year) - min(train$Year)+1` years.
+  \item Since the dataset includes information on multi-line insurance, here I used building and contents (BC), inland marine (IM), and new motor vehicle (PN) claim information.
+\end{itemize}
+
+# Observable Policy Characteristics used as Covariates
+\begin{center}
+\resizebox{!}{3.35cm}{
+\begin{tabular}{l|lrrr}
+\hline \hline
+Categorical & Description &  & \multicolumn{2}{c}{Proportions} \\
+variables \\
+\hline
+TypeCity & Indicator for city entity:           & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$TypeCity)/length(train$PolicyNum),2)` \%} \\
+TypeCounty & Indicator for county entity:       & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$TypeCounty)/length(train$PolicyNum),2)` \%} \\
+TypeMisc & Indicator for miscellaneous entity:  & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$TypeMisc)/length(train$PolicyNum),2)` \%} \\
+TypeSchool & Indicator for school entity:       & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$TypeSchool)/length(train$PolicyNum),2)` \%} \\
+TypeTown & Indicator for town entity:           & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$TypeTown)/length(train$PolicyNum),2)` \%} \\
+TypeVillage & Indicator for village entity:     & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$TypeVillage)/length(train$PolicyNum),2)` \%} \\
+NoClaimCreditBC & No BC claim in prior year:    & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$NoClaimCreditBC)/length(train$PolicyNum),2)` \%} \\
+NoClaimCreditIM & No IM claim in prior year:    & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$NoClaimCreditIM)/length(train$PolicyNum),2)` \%} \\
+NoClaimCreditPN & No PN claim in prior year:    & Y=1 & \multicolumn{2}{c}{`r round(100*sum(train$NoClaimCreditPN)/length(train$PolicyNum),2)` \%} \\
+
+\hline
+ Continuous & & Minimum & Mean & Maximum \\
+ variables \\
+\hline
+CoverageBC  & Log coverage amount of BC claim in mm  &  `r round(min(train$CoverageBC),2)` & `r round(mean(train$CoverageBC),2)`
+            & `r round(max(train$CoverageBC),2)`\\
+lnDeductBC  & Log deductible amount for BC claim     &  `r round(min(train$lnDeductBC),2)` & `r round(mean(train$lnDeductBC),2)`
+            & `r round(max(train$lnDeductBC),2)`\\
+CoverageIM  & Log coverage amount of IM claim in mm  &  `r round(min(train$CoverageIM),2)` & `r round(mean(train$CoverageIM),2)`
+            & `r round(max(train$CoverageIM),2)`\\
+lnDeductIM  & Log deductible amount for IM claim     &  `r round(min(train$lnDeductIM),2)` & `r round(mean(train$lnDeductIM),2)`
+            & `r round(max(train$lnDeductIM),2)`\\
+CoveragePN  & Log coverage amount of PN claim in mm  &  `r round(min(train$CoveragePN),2)` & `r round(mean(train$CoveragePN),2)`
+            & `r round(max(train$CoveragePN),2)`\\
+\hline \hline
+\end{tabular}}
+\end{center}
+
+# Summary Statistics for Frequency
+
+\begin{center}
+\resizebox{!}{0.95cm}{
+\begin{tabular}{l|lrrrr}
+\hline \hline
+        &                               & Minimum & Mean & Variance & Maximum \\
+\hline
+FreqBC  & number of BC claim in a year  & `r round(min(train$FreqBC),2)` &
+`r round(mean(train$FreqBC),2)`         & `r round(var(train$FreqBC),2)` &
+`r round(max(train$FreqBC),2)` \\
+FreqIM  & number of IM claim in a year  & `r round(min(train$FreqIM),2)` &
+`r round(mean(train$FreqIM),2)`         & `r round(var(train$FreqIM),2)` &
+`r round(max(train$FreqIM),2)` \\
+FreqPN  & number of PN claim in a year  & `r round(min(train$FreqPN),2)` &
+`r round(mean(train$FreqPN),2)`         & `r round(var(train$FreqPN),2)` &
+`r round(max(train$FreqPN),2)` \\
+\hline \hline
+\end{tabular}}
+\end{center}
+
+In terms of frequency, IM has relatively moderate dispersion of the number of claim per year, whereas BC has very wide range. Usually, dataset used to calibrate two-parts GLM in practice rarely contains a policy which has more than six claims in a year. So we may need a different methodology for modelling such unusual high frequency.
+
+# Summary Statistics for Frequency (Cont'D)
+
+```{r, echo=FALSE, message=FALSE,warning=FALSE}
+library(knitr)
+library(kableExtra)
+library(plyr)
+library(fitdistrplus)
+
+Fumm <- data.frame(train$FreqBC)
+colnames(Fumm) <- "Freq"
+freqtable <- as.data.frame(count(Fumm, 'Freq'))
+colnames(freqtable) <- c("Count","BC")
+ft <- rbind( freqtable[1:10, ],c(">9",
+                                          sum(freqtable$BC[11:length(freqtable$BC)])) )
+
+Fumm <- data.frame(train$FreqIM)
+colnames(Fumm) <- "Freq"
+freqtable <- as.data.frame(count(Fumm, 'Freq'))
+colnames(freqtable) <- c("Count","IM")
+freqtable <- rbind(freqtable,c(0,0))
+freqtable <- rbind(freqtable,c(0,0))
+freqtable <- rbind(freqtable,c(0,0))
+freqtable <- rbind(freqtable,c(0,0))
+ft <- cbind(ft,freqtable$IM)
+colnames(ft)[3] <- "IM"
+
+Fumm <- data.frame(train$FreqPN)
+colnames(Fumm) <- "Freq"
+freqtable <- as.data.frame(count(Fumm, 'Freq'))
+colnames(freqtable) <- c("Count","PN")
+freqtable <- rbind( freqtable[1:10, ],c(">9",
+                                 sum(freqtable$PN[11:length(freqtable$PN)])) )
+
+ft <- cbind(ft,freqtable$PN)
+colnames(ft)[4] <- "PN"
+options(knitr.table.format = "latex")
+kable_styling(kable(ft,caption = "Distribution of frequency per claim type",booktabs = T,digits=0,linesep = c("", "", "", "", "","", "", "", "", "", "", "\\hline"),  toprule = "\\hhline{====}",bottomrule="\\hhline{====}",escape=FALSE)  %>%  add_header_above(c(" " = 2, "Fitted" = 2)), latex_options = "hold_position")
+```
+
+# Summary Statistics for Severity
+
+\begin{center}
+\resizebox{!}{0.85cm}{
+\begin{tabular}{l|lrrrr}
+\hline \hline
+        &                               & Minimum & Mean & Variance & Maximum \\
+\hline
+log(yAvgBC)  & (log) avg size of BC claim in a year  & `r round(min(log(train$yAvgBC[train$yAvgBC>1])),2)` &
+`r round(mean(log(train$yAvgBC[train$yAvgBC>1])),2)`         & `r round(var(log(train$yAvgBC[train$yAvgBC>1])),2)` &
+`r round(max(log(train$yAvgBC[train$yAvgBC>1])),2)` \\
+log(yAvgIM)  & (log) avg size of IM claim in a year  & `r round(min(log(train$yAvgIM[train$yAvgIM>1])),2)` &
+`r round(mean(log(train$yAvgIM[train$yAvgIM>1])),2)`         & `r round(var(log(train$yAvgIM[train$yAvgIM>1])),2)` &
+`r round(max(log(train$yAvgIM[train$yAvgIM>1])),2)` \\
+log(yAvgPN)  & (log) avg size of PN claim in a year  & `r round(min(log(train$yAvgPN[train$yAvgPN>1])),2)` &
+`r round(mean(log(train$yAvgPN[train$yAvgPN>1])),2)`         & `r round(var(log(train$yAvgPN[train$yAvgPN>1])),2)` &
+`r round(max(log(train$yAvgPN[train$yAvgPN>1])),2)` \\
+\hline \hline
+\end{tabular}}
+\end{center}
+
+# MSEs for all Type of Claim per Model (Interim)
+
+\begin{center}
+{\begin{tabular}{l|rrr}
+\hline\hline
+MSE              & BC       & IM        & PN        \\
+\hline
+Indep Pois-Gamma & 314562.2 & 12541.825 & 4349.914  \\
+Dep Pois-Gamma   & 183466.2 & 6647.310  & 4349.914  \\
+Indep ZIP-Gamma  & 305939.2 & 7983.752  & 3655.829  \\
+Dep ZIP-Gamma    & 203612.1 & 6939.829  & 3672.773  \\
+Indep-2P NN      & 142480.4 & 6720.742  & 4070.260  \\
+Dep-2P NN        & 142480.2 & 6720.774  & 4070.372  \\
+1P NN            & 141360.4 & 6684.799  & 3983.987  \\
+Tweedie GLM      & 182278.8 & 30998.432 & 4401.668  \\
+\hline\hline
+\end{tabular}}
+\end{center}
+
+# Entertained Models
+
+\begin{itemize}
+  \item Likelihood based models
+    \begin{itemize}
+    \item Frequency part: Poisson in BC and IM, ZIP in PN
+    \item Severity part: Gamma, \color{purple} Generalized Pareto (GP), and GB2
+    \end{itemize} \color{black}
+  \item Neural network for two-parts / compound loss
+\end{itemize}
+
+# GP Distribution
+
+Suppose gamma/inv-gamma random effect model is given as following.
+$$
+Y_t|U \sim \  \text{Gamma}({\psi_t}, U   \frac{\mu_{t}}{\psi_{t}} ) \quad \text{and} \quad U \sim \text{Inv-Gamma}(\eta+1,\eta)
+$$
+Then We can derive a multivariate joint distribution of $\textbf{Y}_T = (Y_1,Y_2,\ldots,Y_T)'$ by integrating out the random effects $U$.
+$$
+\begin{aligned}
+f_{\textbf{Y}_T}(\textbf{y}_T)&=\int_0 ^{\infty} \prod_{t=1}^T f_{Y_t|U}(y_t|u)p(u)du\\
+&=\frac{  \eta^{\eta+1} \prod_{t=1}^T (\psi_t y_t \mu_t^{-1} )^{\psi_t} } {(\eta+\sum_{t=1}^T \psi_t y_t \mu_t^{-1} )^{\sum\psi_t +\eta+1}} \times \frac{  \Gamma(\sum\psi_t+\eta+1)\prod_{t=1}^T y_t^{-1}}{\prod_{t=1}^T \Gamma(\psi_t)\Gamma(\eta+1)}
+\end{aligned}
+$$
+
+# Conditional Distribution from the MVGP
+
+Now, using given joint density, we may derive conditonal distribution of $Y_{T+1}$ given $\textbf{Y}_T$. Here, let us denote $w_T = \eta+\sum_{t=1}^{T}\psi_ty_t\mu_t^{-1}$, and $\eta_T=\eta+\sum_{t=1}^{T}\psi_t$.
+$$
+\begin{aligned}
+f_{Y_{T+1}|\textbf{Y}_T}(y_{T+1}|\textbf{y}_T)&= f_{\textbf{Y}_{T+1}}(\textbf{y}_{T+1} ) / f_{\textbf{Y}_T}(\textbf{y}_T) \\
+&=\frac{  w_T^{\eta+1} (\psi_{T+1} y_{T+1} \mu_{T+1}^{-1} )^{\psi_{T+1}} } {(w_T +\psi_{T+1} y_{T+1} \mu_{T+1}^{-1} )^{\psi_{T+1} +\eta_T+1}} \\
+&\quad \times \frac{  \Gamma(\psi_{T+1}+\eta_T+1)y_{T+1}^{-1}}{ \Gamma(\psi_{T+1})\Gamma(\eta_T+1)}
+\end{aligned}
+$$
+As a result, we can see that $Y_{T+1} | \textbf{Y}_T \sim GP(\eta_T+1,  w_T{\mu_{T+1}  /  \psi_{T+1}},\psi_{T+1})$ and $\E{Y_{T+1} | \textbf{Y}_T}=\frac{w_T\mu_{T+1}\psi_{T+1}}{(\eta_T+1-1)\psi_{T+1}}=\frac{w_T}{\eta_T} \mu_{T+1}$
+
+# A Posteriori Premium for Average Severity in GP
+
+Note that we may use the previous argument for the average severity modelling by denoting
+$$
+Y_t = \overline{C}_t|N_t, \ \psi_t = N_t/\phi, \ \mu_t = \exp(X_t\beta + N_t\theta), \ \eta= k/\phi
+$$
+
+Therefore, we have two types of premium, a priori premium and a posteriori premium, which is a product of weight factor from previous observation and a priori premium.
+
+$$
+\begin{aligned}
+\E{\overline{C}_{T+1} |N_{T+1} }&= \exp(X_{T+1}\beta + N_{T+1}\theta) \\
+\E{\overline{C}_{T+1} | \overline{\textbf{C}}_T, \textbf{N}_T }&= \exp(X_{T+1}\beta + N_{T+1}\theta) \frac{k+\sum_{t=1}^{T}S_t\mu_t^{-1}}{k+\sum_{t=1}^{T}N_t} 
+\end{aligned}
+$$
+
+# GB2 Distribution
+
+G-Gamma/GI-gamma random effect model is given as following. Let us denote that $z_t=\frac{\Gamma(\psi_t+1/p)}{\Gamma(\psi_t)}$, and $w=\frac{\Gamma(\eta+1)}{\Gamma(\eta+1-1/p)}$.
+$$
+Y_t|U \sim \  \text{G-Gamma}({\psi_t}, U   \frac{\mu_{t}}{z_{t}},p ) \quad \text{and} \quad U \sim \text{GI-Gamma}(\eta+1,w,p)
+$$
+Then we can derive a multivariate joint distribution of $\textbf{Y}_T = (Y_1,Y_2,\ldots,Y_T)'$ by integrating out the random effects $U$ as well.
+$$
+\begin{aligned}
+f_{\textbf{Y}_T}(\textbf{y}_T)&=\int_0 ^{\infty} \prod_{t=1}^T f_{Y_t|U}(y_t|u)p(u)du\\
+&=\frac{ p^T w^{p(\eta+1)} \prod_{t=1}^T (z_t y_t \mu_t^{-1} )^{p\psi_t} } {(w^p+\sum_{t=1}^T (z_t y_t \mu_t^{-1})^p )^{\sum\psi_t +\eta+1}} \times \frac{  \Gamma(\sum\psi_t+\eta+1)\prod_{t=1}^T y_t^{-1}}{\prod_{t=1}^T \Gamma(\psi_t)\Gamma(\eta+1)}
+\end{aligned}
+$$
+
+# Conditional Distribution from the MVGB2
+
+Now, using given joint density, we may derive conditonal distribution of $Y_{T+1}$ given $\textbf{Y}_T$. Here, let us denote $w^{*}_{T,p} = \sqrt[p] {w^p+\sum_{t=1}^{T} (\psi_ty_t\mu_t^{-1})^p}$, and $\eta_T=\eta+\sum_{t=1}^{T}\psi_t$, then we can get
+$$
+\begin{aligned}
+f_{Y_{T+1}|\textbf{Y}_T}(y_{T+1}|\textbf{y}_T)&= f_{\textbf{Y}_{T+1}}(\textbf{y}_{T+1} ) / f_{\textbf{Y}_T}(\textbf{y}_T) \\
+&=\frac{  (w^{*}_{T,p})^{p(\eta+1)} (z_{T+1} y_{T+1} \mu_{T+1}^{-1} )^{p\psi_{T+1}} } {((w^{*}_{T,p})^p +(z_{T+1} y_{T+1} \mu_{T+1}^{-1})^p )^{\psi_{T+1} +\eta_T+1}} \\
+& \quad \times \frac{  \Gamma(\psi_{T+1}+\eta_T+1)y_{T+1}^{-1}}{ \Gamma(\psi_{T+1})\Gamma(\eta_T+1)}.
+\end{aligned}
+$$
+As a result, we can see that $Y_{T+1} | \textbf{Y}_T \sim GB2(\eta_T+1,  w^*_{T,p}{\mu_{T+1}  /  z_{T+1}},\psi_{T+1},p)$ 
+so that $\E{Y_{T+1} | \textbf{Y}_T}=w^*_{T,p}\mu_{T+1}\frac{\Gamma(\eta_T+1-1/p)z_{T+1}}{\Gamma(\eta_T+1)z_{T+1}}=w^*_{T,p}\frac{\Gamma(\eta_T+1-1/p)}{\Gamma(\eta_T+1)} \mu_{T+1}$
+
+# A Posteriori Premium for Average Severity in GB2
+
+Again, we may use the previous argument for the average severity modelling by denoting
+$$
+Y_t = \overline{C}_t|N_t, \ \psi_t = N_t/\phi, \ \mu_t = \exp(X_t\beta + N_t\theta), \ \eta = k/\phi
+$$
+Therefore, we have two types of premium, a priori premium and a posteriori premium as well.
+$$
+\begin{aligned}
+\E{\overline{C}_{T+1} |N_{T+1} }&= \exp(X_{T+1}\beta + N_{T+1}\theta) \\
+\E{\overline{C}_{T+1} | \overline{\textbf{C}}_T, \textbf{N}_T }&= \exp(X_{T+1}\beta + N_{T+1}\theta) \times \\ & \quad \sqrt[p] {w^p+\sum_{t=1}^{T} (\overline{C}_t\mu_t^{-1} z_t )^p}\frac{\Gamma(k/\phi+1+\sum_{t=1}^{T}N_t/\phi-1/p)}{\Gamma(k/\phi+1+\sum_{t=1}^{T}N_t/\phi)}
+\end{aligned}
+$$
+
+# Remark for the weight factor in a Posteriori Premium
+
+We may observe that as $k \rightarrow \infty$, the following holds.
+$$
+\begin{aligned}
+& \frac{k+\sum_{t=1}^{T}S_t\mu_t^{-1}}{k+\sum_{t=1}^{T}N_t} \ \rightarrow \ 1, \\
+& \sqrt[p] {w^p+\sum_{t=1}^{T} (\overline{C}_t\mu_t^{-1} z_t )^p}\frac{\Gamma(k/\phi+1+\sum_{t=1}^{T}N_t/\phi-1/p)}{\Gamma(k/\phi+1+\sum_{t=1}^{T}N_t/\phi)} \ \rightarrow \ 1 \\
+& \left( \because \ {\displaystyle \lim _{n\to \infty }{\frac {\Gamma (n+\alpha )}{\Gamma (n)n^{\alpha }}}=1,\quad \alpha \in \mathbb {C} }  \ \text{ and } \  w=\frac{\Gamma(k/\phi+1)}{\Gamma(k/\phi+1-1/p)} \right)
+\end{aligned}
+$$
+Therefore, $k$ works as a smoothing factor for a posteriori premium. In other words, if we choose very small $k$, then we use more information from the past, whereas if we choose relatively large $k$, then we use less information from the past.
+
+# Distribution of Weight factors for each Claim
+
+```{r,echo=FALSE}
+load(file="BC.Rdata")
+wf <- rbind(summary(postweight),summary(post2weight))
+rownames(wf)[1:2] <- c("BC: GP weight","BC: GB2 weight")
+load(file="IM.Rdata")
+wf <- rbind(wf,summary(postweight),summary(post2weight))
+rownames(wf)[3:4] <- c("IM: GP weight","IM: GB2 weight")
+load(file="PN.Rdata")
+wf <- rbind(wf,summary(postweight),summary(post2weight))
+rownames(wf)[5:6] <- c("PN: GP weight","PN: GB2 weight")
+print(wf,digits = 3)
+```
+
+# Validation Measures for Model Comparison
+
+\begin{itemize}
+  \item Mean Squared Error
+  \item Gini Index
+    \begin{itemize}
+      \item Since total claim amounts in validation set are mostly 0, use of gini index could be misleading.
+      \item So I used only positive amounts of actual loss (and corresponding predicted pure premium) for drawing Lorenz curves.
+    \end{itemize}
+\end{itemize}
+
+# Gini Indices for BC Claim
+
+```{r, echo=FALSE, message=FALSE, gini_BC, fig.cap="The Lorenz curve and the Gini index values for BC claim",fig.height=6.15}
+source("Gindex.R")
+load(file="BC.Rdata")
+nv <- rep(mean(train$ClaimBC),nrow(test))
+Px <- rep(1,length(test$ClaimBC[test$ClaimBC>0]))
+par(mfrow=c(2,4),mar=c(1,1,4,1),mgp=c(2.2,1,0),oma=c(0,0,0,0))
+gingraph.poisgam_dep <- gini.index.graphic(glm.avgsev.pois_pred[test$ClaimBC>0]*glm.freq.pois_pred[test$ClaimBC>0]
+                                         ,test$ClaimBC[test$ClaimBC>0],Px,Title="Dep Pois-Gamma GLM")
+gingraph.poisgp_pri <- gini.index.graphic(gp.avgsev.pois_pred[test$ClaimBC>0]*glm.freq.pois_pred[test$ClaimBC>0]
+                                         ,test$ClaimBC[test$ClaimBC>0],Px,Title="Pois-GP Prior")
+gingraph.poisgp_pos <- gini.index.graphic((gp.avgsev.pois_pred*glm.freq.pois_pred*postweight)[test$ClaimBC>0]
+                                         ,test$ClaimBC[test$ClaimBC>0],Px,Title="Pois-GP Posterior")
+gingraph.poisgb2_pri <- gini.index.graphic(GB2.avgsev.pois_pred[test$ClaimBC>0]*glm.freq.pois_pred[test$ClaimBC>0]
+                                         ,test$ClaimBC[test$ClaimBC>0],Px,Title="Pois-GB2 Prior")
+gingraph.poisgb2_pos <- gini.index.graphic((GB2.avgsev.pois_pred*glm.freq.pois_pred*post2weight)[test$ClaimBC>0]
+                                         ,test$ClaimBC[test$ClaimBC>0],Px,Title="Pois-GB2 Posterior")
+gingraph.2nnet_dep <- gini.index.graphic(nnet.avgsev_dep.pred[test$ClaimBC>0]*nnet.freq.pred[test$ClaimBC>0]
+                                         ,test$ClaimBC[test$ClaimBC>0],Px,Title="Dep Two-parts NN")
+gingraph.1nnet <- gini.index.graphic(nnet.tsev.pred[test$ClaimBC>0],test$ClaimBC[test$ClaimBC>0],Px,Title="One-part NN")
+gingraph.naive <- gini.index.graphic(nv[test$ClaimBC>0],Px,Px,Title="Naive sample mean")
+
+MSE_gam      <- sqrt(mean((glm.avgsev.pois_pred*glm.freq.pois_pred - test$ClaimBC)^2)) # two-part glm (pois + gamma)
+MSE_nnet2dep <- sqrt(mean((nnet.avgsev_dep.pred*nnet.freq.pred - test$ClaimBC)^2)) # two-part nnet
+MSE_prigp    <- sqrt(mean((gp.avgsev.pois_pred*glm.freq.pois_pred - test$ClaimBC)^2)) # priori two-part (pois + gp)
+MSE_posgp    <- sqrt(mean((gp.avgsev.pois_pred*glm.freq.pois_pred*postweight - test$ClaimBC)^2)) # posterior two-part (pois + gp)
+MSE_prigb2   <- sqrt(mean((GB2.avgsev.pois_pred  *glm.freq.pois_pred - test$ClaimBC)^2)) # dep two-part glm (pois + GB2)
+MSE_posgb2   <- sqrt(mean((GB2.avgsev.pois_pred  *glm.freq.pois_pred*post2weight - test$ClaimBC)^2)) # dep two-part glm (pois + GB2)
+MSE_nnet1    <- sqrt(mean((nnet.tsev.pred - test$ClaimBC)^2))    # one-part nnet
+MSE_naive    <- sqrt(mean((nv - test$ClaimBC)^2)) # naive
+
+MSE <- as.data.frame(c(MSE_gam,MSE_nnet2dep,MSE_prigp,MSE_posgp,MSE_prigb2,MSE_posgb2,MSE_nnet1,MSE_naive))
+colnames(MSE) <- "BC"
+rownames(MSE) <- c("Gamma","2P NN","Prior GP","Posterior GP","Prior GB2","Posterior GB2","1P NN","Naive")
+```
+
+# Gini Indices for IM Claim
+ 
+```{r, echo=FALSE, message=FALSE, gini_IM, fig.cap="The Lorenz curve and the Gini index values for IM claim",fig.height=6.15}
+load(file="IM.Rdata")
+nv <- rep(mean(train$ClaimIM),nrow(test))
+Px <- rep(1,length(test$ClaimIM[test$ClaimIM>0]))
+par(mfrow=c(2,4),mar=c(1,1,4,1),mgp=c(2.2,1,0),oma=c(0,0,0,0))
+gingraph.poisgam_dep <- gini.index.graphic(glm.avgsev.pois_pred[test$ClaimIM>0]*glm.freq.pois_pred[test$ClaimIM>0]
+                                         ,test$ClaimIM[test$ClaimIM>0],Px,Title="Dep Pois-Gamma GLM")
+gingraph.poisgp_pri <- gini.index.graphic(gp.avgsev.pois_pred[test$ClaimIM>0]*glm.freq.pois_pred[test$ClaimIM>0]
+                                         ,test$ClaimIM[test$ClaimIM>0],Px,Title="Pois-GP Prior")
+gingraph.poisgp_pos <- gini.index.graphic((gp.avgsev.pois_pred*glm.freq.pois_pred*postweight)[test$ClaimIM>0]
+                                         ,test$ClaimIM[test$ClaimIM>0],Px,Title="Pois-GP Posterior")
+gingraph.poisgb2_pri <- gini.index.graphic(GB2.avgsev.pois_pred[test$ClaimIM>0]*glm.freq.pois_pred[test$ClaimIM>0]
+                                         ,test$ClaimIM[test$ClaimIM>0],Px,Title="Pois-GB2 Prior")
+gingraph.poisgb2_pos <- gini.index.graphic((GB2.avgsev.pois_pred*glm.freq.pois_pred*post2weight)[test$ClaimIM>0]
+                                         ,test$ClaimIM[test$ClaimIM>0],Px,Title="Pois-GB2 Posterior")
+gingraph.2nnet_dep <- gini.index.graphic(nnet.avgsev_dep.pred[test$ClaimIM>0]*nnet.freq.pred[test$ClaimIM>0]
+                                         ,test$ClaimIM[test$ClaimIM>0],Px,Title="Dep Two-parts NN")
+gingraph.1nnet <- gini.index.graphic(nnet.tsev.pred[test$ClaimIM>0],test$ClaimIM[test$ClaimIM>0],Px,Title="One-part NN")
+gingraph.naive <- gini.index.graphic(nv[test$ClaimIM>0],Px,Px,Title="Naive sample mean")
+
+MSE_gam      <- sqrt(mean((glm.avgsev.pois_pred*glm.freq.pois_pred - test$ClaimIM)^2)) # two-part glm (pois + gamma)
+MSE_nnet2dep <- sqrt(mean((nnet.avgsev_dep.pred*nnet.freq.pred - test$ClaimIM)^2)) # two-part nnet
+MSE_prigp    <- sqrt(mean((gp.avgsev.pois_pred*glm.freq.pois_pred - test$ClaimIM)^2)) # prior two-part (pois + gp)
+MSE_posgp    <- sqrt(mean((gp.avgsev.pois_pred*glm.freq.pois_pred*postweight - test$ClaimIM)^2)) # posterior two-part (pois + gp)
+MSE_prigb2   <- sqrt(mean((GB2.avgsev.pois_pred  *glm.freq.pois_pred - test$ClaimIM)^2)) # dep two-part glm (pois + GB2)
+MSE_posgb2   <- sqrt(mean((GB2.avgsev.pois_pred  *glm.freq.pois_pred*post2weight - test$ClaimIM)^2)) # dep two-part glm (pois + GB2)
+MSE_nnet1    <- sqrt(mean((nnet.tsev.pred - test$ClaimIM)^2))    # one-part nnet
+MSE_naive    <- sqrt(mean((nv - test$ClaimIM)^2)) # naive
+MSE$IM <- c(MSE_gam,MSE_nnet2dep,MSE_prigp,MSE_posgp,MSE_prigb2,MSE_posgb2,MSE_nnet1,MSE_naive)
+```
+
+# Gini Indices for PN Claim
+
+```{r, echo=FALSE, message=FALSE, gini_PN, fig.cap="The Lorenz curve and the Gini index values for PN claim",fig.height=6.15}
+load(file="PN.Rdata")
+nv <- rep(mean(train$ClaimPN),nrow(test))
+Px <- rep(1,length(test$ClaimPN[test$ClaimPN>0]))
+par(mfrow=c(2,4),mar=c(1,1,4,1),mgp=c(2.2,1,0),oma=c(0,0,0,0))
+gingraph.zipgam_dep <- gini.index.graphic(glm.avgsev.zip_pred[test$ClaimPN>0]*glm.freq.zip_pred[test$ClaimPN>0]
+                                         ,test$ClaimPN[test$ClaimPN>0],Px,Title="Dep ZIP-Gamma GLM")
+gingraph.zipgp_pri <- gini.index.graphic(gp.avgsev.zip_pred[test$ClaimPN>0]*glm.freq.zip_pred[test$ClaimPN>0]
+                                         ,test$ClaimPN[test$ClaimPN>0],Px,Title="ZIP-GP Prior")
+gingraph.zipgp_pos <- gini.index.graphic((gp.avgsev.zip_pred*glm.freq.pois_pred*postweight)[test$ClaimPN>0]
+                                         ,test$ClaimPN[test$ClaimPN>0],Px,Title="ZIP-GP Posterior")
+gingraph.zipgb2_pri <- gini.index.graphic(GB2.avgsev.zip_pred[test$ClaimPN>0]*glm.freq.zip_pred[test$ClaimPN>0]
+                                         ,test$ClaimPN[test$ClaimPN>0],Px,Title="ZIP-GB2 Prior")
+gingraph.zipgb2_pos <- gini.index.graphic((GB2.avgsev.zip_pred*glm.freq.pois_pred*post2weight)[test$ClaimPN>0]
+                                         ,test$ClaimPN[test$ClaimPN>0],Px,Title="ZIP-GB2 Posterior")
+gingraph.2nnet_dep <- gini.index.graphic(nnet.avgsev_dep.pred[test$ClaimPN>0]*nnet.freq.pred[test$ClaimPN>0]
+                                         ,test$ClaimPN[test$ClaimPN>0],Px,Title="Dep Two-parts NN")
+gingraph.1nnet <- gini.index.graphic(nnet.tsev.pred[test$ClaimPN>0],test$ClaimPN[test$ClaimPN>0],Px,Title="One-part NN")
+gingraph.naive <- gini.index.graphic(nv[test$ClaimPN>0],Px,Px,Title="Naive sample mean")
+
+MSE_gam      <- sqrt(mean((glm.avgsev.zip_pred*glm.freq.zip_pred - test$ClaimPN)^2)) # two-part glm (zip + gamma)
+MSE_nnet2dep <- sqrt(mean((nnet.avgsev_dep.pred*nnet.freq.pred - test$ClaimPN)^2)) # two-part nnet
+MSE_prigp    <- sqrt(mean((gp.avgsev.zip_pred*glm.freq.zip_pred - test$ClaimPN)^2)) # prior two-part (zip + gp)
+MSE_posgp    <- sqrt(mean((gp.avgsev.zip_pred*glm.freq.zip_pred*postweight - test$ClaimPN)^2)) # posterior two-part (zip + gp)
+MSE_prigb2   <- sqrt(mean((GB2.avgsev.zip_pred  *glm.freq.zip_pred - test$ClaimPN)^2)) # priori two-part glm (zip + GB2)
+MSE_posgb2   <- sqrt(mean((GB2.avgsev.zip_pred  *glm.freq.zip_pred*post2weight - test$ClaimPN)^2)) # dep two-part glm (zip + GB2)
+MSE_nnet1    <- sqrt(mean((nnet.tsev.pred - test$ClaimPN)^2))    # one-part nnet
+MSE_naive    <- sqrt(mean((nv - test$ClaimPN)^2)) # naive
+MSE$PN <- c(MSE_gam,MSE_nnet2dep,MSE_prigp,MSE_posgp,MSE_prigb2,MSE_posgb2,MSE_nnet1,MSE_naive)
+```
+
+# MSEs for all Type of Claim per Model
+
+```{r, echo=FALSE, message=FALSE}
+MSE
+```
+
+# Analysis of the Results
+
+\begin{itemize}
+  \item Sample mean is the most naive and simple estimator but sometimes it is hard to outperform that even with so-called `sophisticated method' - and that is why insurance companies try to increase market share continually.
+  \item According to the MSE of given models, in all claim use of posteriori premium based on MVGP or MVGB2 distribution outperformed all the other models.
+  \item In case of PN claim model, every model showed poor performance for risk classification, which might be due to the lack of relevant explanatory variables.
+\end{itemize}
+
+# Concluding remarks
+
+\begin{itemize}
+  \item With the presence of relevent covariates, use of posterior GB2 distribution showed good performance for the building and contents (BC) claim prediction even with unusual claim feature - very high claim frequency per year.
+  \item In the use of MVGB2 distribution, parameter $k$ works as a regularizing parameter so that $k=\infty$ and $p=1$ is equivalent to current i.i.d. gamma GLM framework for the average severity.
+  \item Therefore, proposed MVGB2 is a natural extension of current two-parts model entertained in most of P\&C insurance company, which can add the more complexity while retaining interpretability of the model.
+\end{itemize}
+
+# Future Works
+
+\begin{itemize}
+  \item It would be worthwhile to calibrate auto insurance claim with the posterior GB2 distribution, upon the existence of relevant explanatory variables.
+  \item For deriving MVGB2 distribution, the unit of repetead measurement needs not be limited to each policyholder, but might be the classes of policyholder with the same bonus-malus score, or certain risk homogeneous classes obtained by clustering methods.
+\end{itemize}
